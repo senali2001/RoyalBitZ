@@ -1,0 +1,416 @@
+using Microsoft.EntityFrameworkCore;
+using RoyalBidz.Server.Models;
+
+namespace RoyalBidz.Server.Data
+{
+    public class RoyalBidzDbContext : DbContext
+    {
+        public RoyalBidzDbContext(DbContextOptions<RoyalBidzDbContext> options) : base(options)
+        {
+        }
+
+        public DbSet<User> Users { get; set; }
+        public DbSet<UserProfile> UserProfiles { get; set; }
+        public DbSet<UserPreferences> UserPreferences { get; set; }
+        public DbSet<UserActivity> UserActivities { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<Wishlist> Wishlists { get; set; }
+        public DbSet<PaymentMethod> PaymentMethods { get; set; }
+        public DbSet<JewelryItem> JewelryItems { get; set; }
+        public DbSet<JewelryImage> JewelryImages { get; set; }
+        public DbSet<Auction> Auctions { get; set; }
+        public DbSet<Bid> Bids { get; set; }
+        public DbSet<Payment> Payments { get; set; }
+        public DbSet<ContactInquiry> ContactInquiries { get; set; }
+        public DbSet<SocialShare> SocialShares { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            // User configuration
+            modelBuilder.Entity<User>(entity =>
+            {
+                entity.ToTable("users");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Email).IsUnique();
+                entity.Property(e => e.Email).IsRequired();
+                entity.Property(e => e.Username).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.PasswordHash).IsRequired();
+                
+                entity.HasOne(d => d.Profile)
+                    .WithOne(p => p.User)
+                    .HasForeignKey<UserProfile>(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // UserProfile configuration
+            modelBuilder.Entity<UserProfile>(entity =>
+            {
+                entity.ToTable("user_profiles");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId).IsUnique();
+                entity.Property(e => e.UserId).IsRequired();
+            });
+
+            // JewelryItem configuration
+            modelBuilder.Entity<JewelryItem>(entity =>
+            {
+                entity.ToTable("jewelryitems");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.EstimatedValue).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.Weight).HasColumnType("decimal(8,3)");
+            });
+
+            // JewelryImage configuration
+            modelBuilder.Entity<JewelryImage>(entity =>
+            {
+                entity.ToTable("jewelryimages");
+                entity.HasKey(e => e.Id);
+                entity.HasOne(d => d.JewelryItem)
+                    .WithMany(p => p.Images)
+                    .HasForeignKey(d => d.JewelryItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // Auction configuration
+            modelBuilder.Entity<Auction>(entity =>
+            {
+                entity.ToTable("auctions");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.StartingBid).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ReservePrice).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.BidIncrement).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.BuyNowPrice).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.CurrentBid).HasColumnType("decimal(18,2)");
+
+                entity.HasOne(d => d.JewelryItem)
+                    .WithMany(p => p.Auctions)
+                    .HasForeignKey(d => d.JewelryItemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(d => d.Seller)
+                    .WithMany(p => p.CreatedAuctions)
+                    .HasForeignKey(d => d.SellerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(d => d.WinningBidder)
+                    .WithMany()
+                    .HasForeignKey(d => d.WinningBidderId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // Bid configuration
+            modelBuilder.Entity<Bid>(entity =>
+            {
+                entity.ToTable("bids");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.MaxAutoBidAmount).HasColumnType("decimal(18,2)");
+
+                entity.HasOne(d => d.Auction)
+                    .WithMany(p => p.Bids)
+                    .HasForeignKey(d => d.AuctionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(d => d.Bidder)
+                    .WithMany(p => p.Bids)
+                    .HasForeignKey(d => d.BidderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasIndex(e => new { e.AuctionId, e.BidTime });
+            });
+
+            // Payment configuration
+            modelBuilder.Entity<Payment>(entity =>
+            {
+                entity.ToTable("payments");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.AuctioneerFee).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.ProcessingFee).HasColumnType("decimal(18,2)");
+                entity.Property(e => e.TotalAmount).HasColumnType("decimal(18,2)");
+
+                entity.HasOne(d => d.Auction)
+                    .WithMany(p => p.Payments)
+                    .HasForeignKey(d => d.AuctionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(d => d.Payer)
+                    .WithMany(p => p.Payments)
+                    .HasForeignKey(d => d.PayerId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ContactInquiry configuration
+            modelBuilder.Entity<ContactInquiry>(entity =>
+            {
+                entity.ToTable("contact_inquiries");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
+                entity.Property(e => e.MobileNumber).HasMaxLength(20);
+                entity.Property(e => e.Enquiry).IsRequired();
+                entity.Property(e => e.Status).HasConversion<string>();
+                entity.Property(e => e.Priority).HasConversion<string>();
+                entity.Property(e => e.CreatedAt).IsRequired();
+
+                entity.HasIndex(e => e.Status);
+                entity.HasIndex(e => e.CreatedAt);
+                entity.HasIndex(e => e.Email);
+
+                entity.HasOne(d => d.AssignedToUser)
+                    .WithMany()
+                    .HasForeignKey(d => d.AssignedToUserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
+
+            // UserPreferences configuration
+            modelBuilder.Entity<UserPreferences>(entity =>
+            {
+                entity.ToTable("user_preferences");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.UserId).IsUnique();
+                
+                entity.HasOne(d => d.User)
+                    .WithOne(p => p.Preferences)
+                    .HasForeignKey<UserPreferences>(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // UserActivity configuration
+            modelBuilder.Entity<UserActivity>(entity =>
+            {
+                entity.ToTable("user_activities");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.ActivityType).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.Description).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+                
+                entity.HasOne(d => d.User)
+                    .WithMany(p => p.Activities)
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                    
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => e.ActivityType);
+            });
+
+            // Notification configuration
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.ToTable("notifications");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Title).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Message).IsRequired().HasMaxLength(1000);
+                entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+                
+                entity.HasOne(d => d.User)
+                    .WithMany()
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                    
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => new { e.UserId, e.IsRead });
+                entity.HasIndex(e => e.Type);
+            });
+
+            // Wishlist configuration
+            modelBuilder.Entity<Wishlist>(entity =>
+            {
+                entity.ToTable("wishlists");
+                entity.HasKey(e => e.Id);
+                
+                entity.HasOne(d => d.User)
+                    .WithMany()
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                    
+                entity.HasOne(d => d.JewelryItem)
+                    .WithMany()
+                    .HasForeignKey(d => d.JewelryItemId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                    
+                entity.HasIndex(e => new { e.UserId, e.JewelryItemId }).IsUnique();
+            });
+
+            // PaymentMethod configuration
+            modelBuilder.Entity<PaymentMethod>(entity =>
+            {
+                entity.ToTable("payment_methods");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Type).IsRequired().HasMaxLength(50);
+                
+                entity.HasOne(d => d.User)
+                    .WithMany()
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+                    
+                entity.HasIndex(e => e.UserId);
+            });
+
+            // SocialShare configuration
+            modelBuilder.Entity<SocialShare>(entity =>
+            {
+                entity.ToTable("social_shares");
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Platform).IsRequired().HasMaxLength(50);
+                entity.Property(e => e.ShareType).IsRequired().HasMaxLength(20);
+                entity.Property(e => e.SharedUrl).IsRequired().HasMaxLength(500);
+                entity.Property(e => e.UserAgent).HasMaxLength(500);
+                entity.Property(e => e.IpAddress).HasMaxLength(50);
+                
+                entity.HasOne(d => d.User)
+                    .WithMany()
+                    .HasForeignKey(d => d.UserId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                    
+                entity.HasOne(d => d.Auction)
+                    .WithMany()
+                    .HasForeignKey(d => d.AuctionId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                    
+                entity.HasIndex(e => e.Platform);
+                entity.HasIndex(e => e.ShareType);
+                entity.HasIndex(e => e.CreatedAt);
+                entity.HasIndex(e => new { e.UserId, e.CreatedAt });
+                entity.HasIndex(e => new { e.AuctionId, e.CreatedAt });
+            });
+
+            // Seed data
+            SeedData(modelBuilder);
+        }
+
+        private void SeedData(ModelBuilder modelBuilder)
+        {
+            var createdAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+            // Seed users
+            modelBuilder.Entity<User>().HasData(
+                new User
+                {
+                    Id = 1,
+                    Username = "admin",
+                    Email = "admin@royalbidz.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
+                    Role = UserRole.Admin,
+                    Status = UserStatus.Active,
+                    CreatedAt = createdAt
+                },
+                new User
+                {
+                    Id = 2,
+                    Username = "seller1",
+                    Email = "seller@royalbidz.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Seller123!"),
+                    Role = UserRole.Seller,
+                    Status = UserStatus.Active,
+                    CreatedAt = createdAt
+                },
+                new User
+                {
+                    Id = 3,
+                    Username = "buyer1",
+                    Email = "buyer@royalbidz.com",
+                    PasswordHash = BCrypt.Net.BCrypt.HashPassword("Buyer123!"),
+                    Role = UserRole.Buyer,
+                    Status = UserStatus.Active,
+                    CreatedAt = createdAt
+                }
+            );
+
+            // Seed jewelry items
+            modelBuilder.Entity<JewelryItem>().HasData(
+                new JewelryItem
+                {
+                    Id = 1,
+                    Name = "Vintage Diamond Ring",
+                    Description = "A stunning vintage diamond ring from the 1950s featuring a 2-carat center stone.",
+                    Type = JewelryType.Ring,
+                    PrimaryMaterial = JewelryMaterial.Diamond,
+                    Brand = "Cartier",
+                    Weight = 5.2m,
+                    Condition = ItemCondition.Excellent,
+                    YearMade = 1955,
+                    Origin = "France",
+                    EstimatedValue = 15000.00m,
+                    CreatedAt = createdAt
+                },
+                new JewelryItem
+                {
+                    Id = 2,
+                    Name = "Pearl Necklace",
+                    Description = "Elegant cultured pearl necklace with 18k gold clasp.",
+                    Type = JewelryType.Necklace,
+                    PrimaryMaterial = JewelryMaterial.Pearl,
+                    Weight = 45.8m,
+                    Condition = ItemCondition.New,
+                    EstimatedValue = 3500.00m,
+                    CreatedAt = createdAt
+                },
+                new JewelryItem
+                {
+                    Id = 3,
+                    Name = "Ruby Earrings",
+                    Description = "Pair of exquisite ruby earrings set in platinum.",
+                    Type = JewelryType.Earrings,
+                    PrimaryMaterial = JewelryMaterial.Ruby,
+                    Weight = 8.1m,
+                    Condition = ItemCondition.VeryGood,
+                    EstimatedValue = 8500.00m,
+                    CreatedAt = createdAt
+                }
+            );
+
+            // Seed jewelry images
+            modelBuilder.Entity<JewelryImage>().HasData(
+                new JewelryImage { Id = 1, JewelryItemId = 1, ImageUrl = "/images/diamond-ring-1.jpg", IsPrimary = true, DisplayOrder = 1, CreatedAt = createdAt },
+                new JewelryImage { Id = 2, JewelryItemId = 1, ImageUrl = "/images/diamond-ring-2.jpg", IsPrimary = false, DisplayOrder = 2, CreatedAt = createdAt },
+                new JewelryImage { Id = 3, JewelryItemId = 2, ImageUrl = "/images/pearl-necklace-1.jpg", IsPrimary = true, DisplayOrder = 1, CreatedAt = createdAt },
+                new JewelryImage { Id = 4, JewelryItemId = 3, ImageUrl = "/images/ruby-earrings-1.jpg", IsPrimary = true, DisplayOrder = 1, CreatedAt = createdAt }
+            );
+
+            // Seed auctions
+            var auctionStartTime = DateTime.UtcNow.AddDays(-1);
+            var auctionEndTime = DateTime.UtcNow.AddDays(7);
+
+            modelBuilder.Entity<Auction>().HasData(
+                new Auction
+                {
+                    Id = 1,
+                    Title = "Vintage Diamond Ring Auction",
+                    Description = "Don't miss this rare opportunity to own a vintage Cartier diamond ring.",
+                    JewelryItemId = 1,
+                    SellerId = 2,
+                    StartingBid = 5000.00m,
+                    ReservePrice = 12000.00m,
+                    BidIncrement = 100.00m,
+                    BuyNowPrice = 18000.00m,
+                    StartTime = auctionStartTime,
+                    EndTime = auctionEndTime,
+                    Status = AuctionStatus.Active,
+                    CurrentBid = 5000.00m,
+                    CreatedAt = createdAt
+                },
+                new Auction
+                {
+                    Id = 2,
+                    Title = "Cultured Pearl Necklace",
+                    Description = "Beautiful cultured pearl necklace perfect for special occasions.",
+                    JewelryItemId = 2,
+                    SellerId = 2,
+                    StartingBid = 1000.00m,
+                    BidIncrement = 50.00m,
+                    StartTime = auctionStartTime,
+                    EndTime = auctionEndTime.AddDays(3),
+                    Status = AuctionStatus.Active,
+                    CurrentBid = 1000.00m,
+                    CreatedAt = createdAt
+                }
+            );
+        }
+    }
+}
